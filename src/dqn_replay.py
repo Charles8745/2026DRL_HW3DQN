@@ -34,7 +34,11 @@ def train_replay(
     out_dir: str = 'results/HW3-1/replay_random',
     eval_n_games: int = 1000,
 ) -> dict:
-    """Train DQN with experience replay per Listing 3.5."""
+    """Train DQN with experience replay per Listing 3.5. Saves checkpoint,
+    snapshots, losses, loss.png, and metrics.json under `out_dir`. Returns
+    metrics dict. For test/smoke runs, set `epochs`, `mem_size`, `batch_size`,
+    and `eval_n_games` low.
+    """
     set_seed(seed)
     out_path = Path(out_dir)
     snapshots_dir = out_path / 'snapshots'

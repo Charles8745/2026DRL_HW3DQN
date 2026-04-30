@@ -23,6 +23,9 @@ def test_smoke_run(tmp_path):
     assert metrics['stage'] == 'HW3-1: Naive DQN for static mode'
     assert metrics['experiment'] == 'replay_static'
     assert metrics['method'] == 'replay'
+    assert metrics['mode'] == 'static'
+    assert 'win_rate' in metrics
+    assert 'training_wall_time_sec' in metrics
 
     assert (out_dir / 'checkpoint.pth').exists()
     assert (out_dir / 'losses.npy').exists()
@@ -32,6 +35,7 @@ def test_smoke_run(tmp_path):
 
     losses = np.load(out_dir / 'losses.npy')
     assert losses.ndim == 1
+    assert len(losses) >= 1
 
     with open(out_dir / 'metrics.json') as f:
         data = json.load(f)
@@ -40,3 +44,7 @@ def test_smoke_run(tmp_path):
 
     snaps = sorted(os.listdir(out_dir / 'snapshots'))
     assert len(snaps) >= 2
+    for s in snaps:
+        assert s.startswith('epoch_') and s.endswith('.pth')
+        sd = torch.load(out_dir / 'snapshots' / s, weights_only=True)
+        assert isinstance(sd, dict)
