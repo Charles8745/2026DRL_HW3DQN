@@ -14,6 +14,7 @@ def test_static_initial_positions():
 def test_render_np_shape():
     """render_np returns (4 pieces, 4 rows, 4 cols) one-hot tensor."""
     g = Gridworld(size=4, mode='static')
+    # Gridworld uses no masks; the mask path in render_np is not exercised here.
     arr = g.board.render_np()
     assert arr.shape == (4, 4, 4)
     assert arr.dtype == np.uint8
@@ -45,6 +46,7 @@ def test_reward_goal():
 
 
 def test_reward_pit():
+    """Stepping onto Pit yields -10."""
     g = Gridworld(size=4, mode='static')
     g.board.components['Player'].pos = (0, 1)  # force onto Pit
     assert g.reward() == -10
