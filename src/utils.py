@@ -54,3 +54,54 @@ def save_metrics(path: str, **kwargs: Any) -> None:
     """Dump kwargs as a JSON object to `path` (UTF-8, indent=2)."""
     with open(path, 'w', encoding='utf-8') as f:
         json.dump(kwargs, f, indent=2, ensure_ascii=False)
+
+
+def test_model(model, mode: str = 'static', max_steps: int = 15) -> tuple[bool, int]:
+    """Run one greedy (no exploration) test game in `mode`. Returns (won, steps).
+    `won` is True iff the agent reached Goal within max_steps. `steps` is the
+    number of moves taken (1-indexed; equals max_steps if it timed out).
+
+    Adapted from Listing 3.4 of DRL in Action Ch.3.
+    """
+    # Local import to avoid circular import at module load
+    from src.gridworld_env import Gridworld
+
+    game = Gridworld(size=4, mode=mode)
+    state = encode_state(game)
+    for step in range(1, max_steps + 1):
+        with torch.no_grad():
+            qval = model(state)
+        action_idx = int(torch.argmax(qval).item())
+        action = ACTION_SET[action_idx]
+        game.makeMove(action)
+        state = encode_state(game)
+        reward = game.reward()
+        if reward != -1:
+            return (reward > 0, step)
+    return (False, max_steps)
+
+
+# Prevent pytest from treating this utility as a test case
+test_model.__test__ = False  # type: ignore[attr-defined]
+
+
+def evaluate(model, mode: str = 'static', n_games: int = 1000) -> dict:
+    """Run `n_games` test games (no ε exploration). Aggregate win rate and
+    average steps among wins. Returns dict with keys:
+        win_rate, avg_steps_per_win, n_games, n_wins
+    """
+    n_wins = 0
+    win_steps = []
+    for _ in range(n_games):
+        won, steps = test_model(model, mode=mode)
+        if won:
+            n_wins += 1
+            win_steps.append(steps)
+    win_rate = n_wins / n_games
+    avg_steps = (sum(win_steps) / len(win_steps)) if win_steps else 0.0
+    return {
+        'win_rate': float(win_rate),
+        'avg_steps_per_win': float(avg_steps),
+        'n_games': int(n_games),
+        'n_wins': int(n_wins),
+    }

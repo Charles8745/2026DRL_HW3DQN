@@ -77,3 +77,41 @@ def test_save_metrics_writes_valid_json(tmp_path):
     assert data["stage"] == "HW3-1"
     assert data["win_rate"] == 0.89
     assert data["hyperparams"]["lr"] == 0.001
+
+
+from src.model import build_model
+from src.utils import test_model, evaluate
+
+
+def test_test_model_returns_tuple():
+    """test_model returns (won: bool, steps: int)."""
+    set_seed(42)
+    model = build_model()
+    won, steps = test_model(model, mode='static', max_steps=15)
+    assert isinstance(won, bool)
+    assert isinstance(steps, int)
+    assert 1 <= steps <= 15
+
+
+def test_test_model_uses_argmax():
+    """A model that always outputs Q=[0,0,0,5] (argmax=3, action 'r') should
+    move the player right from (0,3) — into the wall — and never reach Goal in
+    static mode. Eventually hits max_steps."""
+    class _AlwaysRight(torch.nn.Module):
+        def forward(self, x):
+            return torch.tensor([[0.0, 0.0, 0.0, 5.0]])
+    model = _AlwaysRight()
+    won, steps = test_model(model, mode='static', max_steps=15)
+    assert won is False
+    assert steps == 15
+
+
+def test_evaluate_returns_expected_keys():
+    set_seed(42)
+    model = build_model()
+    result = evaluate(model, mode='static', n_games=10)
+    assert 'win_rate' in result
+    assert 'avg_steps_per_win' in result
+    assert 'n_games' in result
+    assert result['n_games'] == 10
+    assert 0.0 <= result['win_rate'] <= 1.0
