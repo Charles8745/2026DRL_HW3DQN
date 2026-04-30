@@ -126,6 +126,10 @@ def make_dashboard_gif(
     total_steps = len(losses)
 
     snaps = _list_snapshots(snapshots_dir)
+    if not snaps:
+        raise FileNotFoundError(
+            f"No epoch_*.pth snapshots found in {snapshots_dir}"
+        )
     frames: list[np.ndarray] = []
 
     for snap_epoch, snap_path in snaps:

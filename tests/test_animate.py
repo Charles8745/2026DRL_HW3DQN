@@ -1,7 +1,4 @@
 import os
-import numpy as np
-import torch
-from pathlib import Path
 from src.dqn_naive import train_naive
 from src.animate import make_dashboard_gif
 
