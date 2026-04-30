@@ -6,7 +6,9 @@ from src.utils import (
     ACTION_SET, set_seed, encode_state, epsilon_greedy,
     running_mean, save_metrics,
 )
+from src.utils import test_model, evaluate
 from src.gridworld_env import Gridworld
+from src.model import build_model
 
 
 def test_action_set():
@@ -79,10 +81,6 @@ def test_save_metrics_writes_valid_json(tmp_path):
     assert data["hyperparams"]["lr"] == 0.001
 
 
-from src.model import build_model
-from src.utils import test_model, evaluate
-
-
 def test_test_model_returns_tuple():
     """test_model returns (won: bool, steps: int)."""
     set_seed(42)
@@ -113,5 +111,6 @@ def test_evaluate_returns_expected_keys():
     assert 'win_rate' in result
     assert 'avg_steps_per_win' in result
     assert 'n_games' in result
+    assert 'n_wins' in result
     assert result['n_games'] == 10
     assert 0.0 <= result['win_rate'] <= 1.0
