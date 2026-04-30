@@ -1,0 +1,18 @@
+# Original DRL in Action repo (cloned for reference, do not commit)
+DeepReinforcementLearningInAction/
+
+# macOS
+.DS_Store
+
+# Python (further entries added during scaffolding)
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+
+# Editors
+.idea/
+.vscode/
+
+# Claude Code session metadata
+.claude/
