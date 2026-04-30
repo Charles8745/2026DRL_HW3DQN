@@ -61,9 +61,11 @@ def test_epsilon_greedy_pure_exploitation():
 
 
 def test_running_mean_basic():
+    """Output length is len(x) - N (book convention; one less than full
+    sliding-window count). Verifies docstring contract, not full coverage."""
     x = np.ones(100)
     y = running_mean(x, N=10)
-    assert y.shape == (90,)
+    assert y.shape == (90,)  # 100 - 10, NOT 100 - 10 + 1 (book convention)
     assert np.allclose(y, 1.0)
 
 

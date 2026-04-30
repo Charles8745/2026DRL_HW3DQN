@@ -33,7 +33,13 @@ def epsilon_greedy(qval: torch.Tensor, epsilon: float, n_actions: int = 4) -> in
 
 
 def running_mean(x: np.ndarray, N: int = 50) -> np.ndarray:
-    """Simple moving average of length N. Returns array of length len(x) - N."""
+    """Simple moving average of length N. Returns array of length len(x) - N.
+
+    Note: returns one fewer element than the mathematically-complete
+    `len(x) - N + 1` valid windows. This matches DRL in Action Listing 3.6
+    verbatim; downstream plot code in dqn_naive.py is aligned to this
+    length convention.
+    """
     if len(x) <= N:
         return np.array([])
     c = x.shape[0] - N
