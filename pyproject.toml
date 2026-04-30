@@ -1,0 +1,20 @@
+[project]
+name = "hw3-dqn"
+version = "0.1.0"
+description = "HW3 Stage 1 — Naive DQN and Experience Replay on Gridworld"
+requires-python = ">=3.12,<3.13"
+authors = [{ name = "charles88" }]
+readme = "README.md"
+license = { text = "MIT" }
+
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["src*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = "test_*.py"
+addopts = "-q"
