@@ -44,9 +44,9 @@ def test_smoke_run(tmp_path):
     assert 'hyperparams' in data
     assert data['hyperparams']['epochs'] == 5
 
-    # Snapshots: at epochs 0, 2, 4 → 3 files
+    # Snapshots: at epochs 0, 2, 4 → exactly 3 files
     snaps = sorted(os.listdir(out_dir / 'snapshots'))
-    assert len(snaps) >= 2  # at least epoch 0 and epoch 2
+    assert len(snaps) == 3, f"expected 3 snapshots, got {snaps}"
     for s in snaps:
         assert s.startswith('epoch_') and s.endswith('.pth')
         # state dict loadable

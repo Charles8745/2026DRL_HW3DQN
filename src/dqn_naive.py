@@ -5,8 +5,6 @@ transition. Ships with linear epsilon decay.
 """
 
 import argparse
-import json
-import os
 import time
 from pathlib import Path
 
@@ -156,6 +154,8 @@ def main():
     parser.add_argument('--epochs', type=int, default=1000)
     parser.add_argument('--gamma', type=float, default=0.9)
     parser.add_argument('--lr', type=float, default=1e-3)
+    parser.add_argument('--epsilon-start', type=float, default=1.0)
+    parser.add_argument('--epsilon-end', type=float, default=0.1)
     parser.add_argument('--seed', type=int, default=42)
     parser.add_argument('--snapshot-every', type=int, default=50)
     parser.add_argument('--out-dir', default=None,
@@ -164,6 +164,7 @@ def main():
     out_dir = args.out_dir or f'results/HW3-1/naive_{args.mode}'
     train_naive(
         epochs=args.epochs, gamma=args.gamma, lr=args.lr,
+        epsilon_start=args.epsilon_start, epsilon_end=args.epsilon_end,
         mode=args.mode, seed=args.seed,
         snapshot_every=args.snapshot_every, out_dir=out_dir,
     )
