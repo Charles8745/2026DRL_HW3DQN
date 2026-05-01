@@ -178,7 +178,7 @@ def train_double(
 ) -> dict:
     """Double DQN 訓練（Hasselt 2016）。產出與 dqn_replay 相同的檔案集
     （checkpoint, snapshots/, losses.npy, loss.png, metrics.json）。
-    metrics.json 額外帶 algorithm_variant='double'。
+    metrics.json 帶 method='double'。
     """
 ```
 
@@ -231,7 +231,7 @@ def train_dueling(
 ) -> dict:
     """Dueling DQN 訓練（Wang 2016）。網路換成 build_dueling_model，
     target 計算與 baseline 相同，無 target network。
-    metrics.json 帶 algorithm_variant='dueling'。
+    metrics.json 帶 method='dueling'。
     """
 ```
 
@@ -252,7 +252,7 @@ target_model = build_dueling_model()
 # Double 的 target Y 計算與 sync 邏輯完全沿用
 ```
 
-`metrics.json` 帶 `algorithm_variant='double_dueling'`。
+`metrics.json` 帶 `method='double_dueling'`。
 
 ### 4.5 `src/animate.py` 修改
 
