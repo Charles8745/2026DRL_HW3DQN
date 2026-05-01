@@ -1,5 +1,6 @@
 """DQN MLP architecture (Listing 3.2 of DRL in Action Ch.3)."""
 
+import torch
 import torch.nn as nn
 
 
@@ -15,3 +16,33 @@ def build_model(in_dim: int = 64, hidden1: int = 150,
         nn.ReLU(),
         nn.Linear(hidden2, out_dim),
     )
+
+
+class DuelingMLP(torch.nn.Module):
+    """Dueling network: shared trunk -> V(s) head + A(s,a) head, combined with
+    mean-baseline aggregation (Wang et al. 2016, eq. 9).
+
+        Q(s, a) = V(s) + ( A(s, a) - mean_a A(s, a) )
+    """
+
+    def __init__(self, in_dim: int = 64, hidden1: int = 150,
+                 hidden2: int = 100, n_actions: int = 4):
+        super().__init__()
+        self.trunk = torch.nn.Sequential(
+            torch.nn.Linear(in_dim, hidden1), torch.nn.ReLU(),
+            torch.nn.Linear(hidden1, hidden2), torch.nn.ReLU(),
+        )
+        self.value_head = torch.nn.Linear(hidden2, 1)
+        self.advantage_head = torch.nn.Linear(hidden2, n_actions)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        h = self.trunk(x)
+        v = self.value_head(h)                              # (B, 1)
+        a = self.advantage_head(h)                          # (B, n_actions)
+        return v + (a - a.mean(dim=1, keepdim=True))        # (B, n_actions)
+
+
+def build_dueling_model(in_dim: int = 64, hidden1: int = 150,
+                        hidden2: int = 100, n_actions: int = 4) -> DuelingMLP:
+    """Factory mirroring `build_model` but returning a DuelingMLP."""
+    return DuelingMLP(in_dim, hidden1, hidden2, n_actions)
