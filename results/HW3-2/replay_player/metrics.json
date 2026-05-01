@@ -1,5 +1,5 @@
 {
-  "stage": "HW3-1: Naive DQN for static mode",
+  "stage": "HW3-2: Enhanced DQN Variants for player mode",
   "experiment": "replay_player",
   "mode": "player",
   "method": "replay",

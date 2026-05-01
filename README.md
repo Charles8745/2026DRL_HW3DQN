@@ -41,7 +41,7 @@
 - `results/HW3-1/`：三組實驗的訓練產物
   - `naive_static/`、`replay_static/`、`replay_random/`：各含 `loss.png`、`dashboard.gif`、`metrics.json`、`checkpoint.pth`、`losses.npy`、`snapshots/`
 - `docs/superpowers/`：設計文件（`specs/`）與實作計畫（`plans/`）
-- [`report.md`](report.md)：本階段中文短報告（含完整原理推導與程式碼解讀）
+- [`HW3_1_report.md`](HW3_1_report.md)：HW3-1 中文短報告（含完整原理推導與程式碼解讀）
 - [`chatlog.md`](chatlog.md)：與 Claude 完整對話紀錄
 
 ## 分析結果
