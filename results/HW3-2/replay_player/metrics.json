@@ -1,0 +1,23 @@
+{
+  "stage": "HW3-1: Naive DQN for static mode",
+  "experiment": "replay_player",
+  "mode": "player",
+  "method": "replay",
+  "hyperparams": {
+    "epochs": 3000,
+    "gamma": 0.9,
+    "epsilon": 0.3,
+    "lr": 0.001,
+    "mem_size": 1000,
+    "batch_size": 200,
+    "max_moves": 50,
+    "seed": 42,
+    "snapshot_every": 150
+  },
+  "final_loss_mean_last_100": 0.0011663584737107158,
+  "final_loss_std_last_100": 0.00046208983985707164,
+  "win_rate": 1.0,
+  "avg_steps_per_win": 4.359,
+  "n_eval_games": 1000,
+  "training_wall_time_sec": 9.278057098388672
+}
