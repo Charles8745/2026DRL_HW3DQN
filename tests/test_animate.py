@@ -61,3 +61,7 @@ def test_make_dashboard_gif_dueling(tmp_path):
     )
     assert (exp_dir / "dashboard.gif").exists()
     assert gif_path.endswith("dashboard.gif")
+    assert os.path.getsize(gif_path) > 0
+    # Should be a binary file (GIF magic bytes 'GIF8')
+    with open(gif_path, 'rb') as f:
+        assert f.read(4) in (b'GIF8',)

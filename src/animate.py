@@ -14,7 +14,7 @@ import torch
 from matplotlib.patches import Rectangle
 
 from src.gridworld_env import Gridworld
-from src.model import build_model
+from src.model import build_model, build_dueling_model
 from src.utils import ACTION_SET, encode_state, set_seed
 
 
@@ -206,7 +206,6 @@ def main():
     stage_dir = 'HW3-2' if args.exp.endswith('_player') else 'HW3-1'
 
     # Dueling-architecture exps need build_dueling_model for snapshot loading.
-    from src.model import build_dueling_model
     factory = (build_dueling_model
                if args.exp in ('dueling_player', 'combined_player')
                else build_model)
