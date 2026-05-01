@@ -18,7 +18,7 @@ def build_model(in_dim: int = 64, hidden1: int = 150,
     )
 
 
-class DuelingMLP(torch.nn.Module):
+class DuelingMLP(nn.Module):
     """Dueling network: shared trunk -> V(s) head + A(s,a) head, combined with
     mean-baseline aggregation (Wang et al. 2016, eq. 9).
 
@@ -28,12 +28,12 @@ class DuelingMLP(torch.nn.Module):
     def __init__(self, in_dim: int = 64, hidden1: int = 150,
                  hidden2: int = 100, n_actions: int = 4):
         super().__init__()
-        self.trunk = torch.nn.Sequential(
-            torch.nn.Linear(in_dim, hidden1), torch.nn.ReLU(),
-            torch.nn.Linear(hidden1, hidden2), torch.nn.ReLU(),
+        self.trunk = nn.Sequential(
+            nn.Linear(in_dim, hidden1), nn.ReLU(),
+            nn.Linear(hidden1, hidden2), nn.ReLU(),
         )
-        self.value_head = torch.nn.Linear(hidden2, 1)
-        self.advantage_head = torch.nn.Linear(hidden2, n_actions)
+        self.value_head = nn.Linear(hidden2, 1)
+        self.advantage_head = nn.Linear(hidden2, n_actions)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         h = self.trunk(x)
@@ -44,5 +44,10 @@ class DuelingMLP(torch.nn.Module):
 
 def build_dueling_model(in_dim: int = 64, hidden1: int = 150,
                         hidden2: int = 100, n_actions: int = 4) -> DuelingMLP:
-    """Factory mirroring `build_model` but returning a DuelingMLP."""
+    """Dueling-network factory with the same trunk as `build_model` for fair
+    comparison.  The trunk (64-dim one-hot -> 150 -> 100) is identical to
+    Listing 3.2; two heads then split off a scalar V(s) and an n_actions-dim
+    A(s,a), aggregated via mean-baseline Q = V + (A - mean A) per Wang et al.
+    2016, eq. 9.
+    """
     return DuelingMLP(in_dim, hidden1, hidden2, n_actions)
