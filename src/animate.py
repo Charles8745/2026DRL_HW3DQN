@@ -111,6 +111,7 @@ def make_dashboard_gif(
     loss_yscale: str = 'log',
     max_test_steps: int = 15,
     out_filename: str = 'dashboard.gif',
+    model_factory=None,
 ) -> str:
     """Build a dashboard GIF from snapshots of one experiment. Returns gif path."""
     exp_path = Path(exp_dir)
@@ -139,7 +140,8 @@ def make_dashboard_gif(
         set_seed(snap_epoch)
         game = Gridworld(size=4, mode=mode)
         sd = torch.load(snap_path, weights_only=True)
-        model = build_model()
+        factory = model_factory or build_model
+        model = factory()
         model.load_state_dict(sd)
         model.eval()
 
@@ -189,16 +191,31 @@ def make_dashboard_gif(
 
 
 def main():
-    parser = argparse.ArgumentParser(description='Dashboard GIF generator (HW3-1).')
-    parser.add_argument('--exp', required=True,
-                        choices=['naive_static', 'replay_static', 'replay_random'])
+    parser = argparse.ArgumentParser(description='Dashboard GIF generator.')
+    parser.add_argument('--exp', required=True, choices=[
+        # HW3-1
+        'naive_static', 'replay_static', 'replay_random',
+        # HW3-2
+        'replay_player', 'double_player', 'dueling_player', 'combined_player',
+    ])
     parser.add_argument('--fps', type=int, default=5)
     parser.add_argument('--max-steps', type=int, default=15)
     args = parser.parse_args()
+
+    # Stage-1 dir for HW3-1 exps; stage-2 dir for player-mode HW3-2 exps.
+    stage_dir = 'HW3-2' if args.exp.endswith('_player') else 'HW3-1'
+
+    # Dueling-architecture exps need build_dueling_model for snapshot loading.
+    from src.model import build_dueling_model
+    factory = (build_dueling_model
+               if args.exp in ('dueling_player', 'combined_player')
+               else build_model)
+
     yscale = 'log' if 'naive' in args.exp else 'linear'
     out = make_dashboard_gif(
-        exp_dir=f'results/HW3-1/{args.exp}',
+        exp_dir=f'results/{stage_dir}/{args.exp}',
         fps=args.fps, loss_yscale=yscale, max_test_steps=args.max_steps,
+        model_factory=factory,
     )
     print(f'GIF written: {out}')
 
