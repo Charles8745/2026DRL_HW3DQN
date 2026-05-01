@@ -1,4 +1,3 @@
-import json
 import os
 import numpy as np
 import torch
@@ -26,9 +25,14 @@ def test_smoke_run(tmp_path):
     assert metrics['method'] == 'double_dueling'
     assert metrics['mode'] == 'player'
     assert metrics['hyperparams']['sync_freq'] == 5
+    assert 'win_rate' in metrics
+    assert 'training_wall_time_sec' in metrics
 
     assert (out_dir / 'checkpoint.pth').exists()
     assert (out_dir / 'losses.npy').exists()
+    losses = np.load(out_dir / 'losses.npy')
+    assert losses.ndim == 1
+    assert len(losses) >= 1
     assert (out_dir / 'loss.png').exists()
     assert (out_dir / 'metrics.json').exists()
     assert (out_dir / 'snapshots').is_dir()
