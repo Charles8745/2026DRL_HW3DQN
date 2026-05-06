@@ -197,18 +197,27 @@ def main():
         'naive_static', 'replay_static', 'replay_random',
         # HW3-2
         'replay_player', 'double_player', 'dueling_player', 'combined_player',
+        # HW3-3
+        'baseline_random', 'clip_random', 'sched_random',
+        'huber_random', 'full_random',
     ])
     parser.add_argument('--fps', type=int, default=5)
     parser.add_argument('--max-steps', type=int, default=15)
     args = parser.parse_args()
 
-    # Stage-1 dir for HW3-1 exps; stage-2 dir for player-mode HW3-2 exps.
-    stage_dir = 'HW3-2' if args.exp.endswith('_player') else 'HW3-1'
+    # Stage dispatch.
+    hw3_3 = {'baseline_random', 'clip_random', 'sched_random',
+             'huber_random', 'full_random'}
+    if args.exp in hw3_3:
+        stage_dir = 'HW3-3'
+    elif args.exp.endswith('_player'):
+        stage_dir = 'HW3-2'
+    else:
+        stage_dir = 'HW3-1'
 
-    # Dueling-architecture exps need build_dueling_model for snapshot loading.
-    factory = (build_dueling_model
-               if args.exp in ('dueling_player', 'combined_player')
-               else build_model)
+    # Model factory: Dueling for HW3-2 dueling/combined and all HW3-3 cells.
+    dueling_exps = {'dueling_player', 'combined_player'} | hw3_3
+    factory = build_dueling_model if args.exp in dueling_exps else build_model
 
     yscale = 'log' if 'naive' in args.exp else 'linear'
     out = make_dashboard_gif(
