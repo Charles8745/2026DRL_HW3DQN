@@ -200,6 +200,8 @@ def main():
         # HW3-3
         'baseline_random', 'clip_random', 'sched_random',
         'huber_random', 'full_random',
+        # HW3-4
+        'combined_random', 'rainbow_random',
     ])
     parser.add_argument('--fps', type=int, default=5)
     parser.add_argument('--max-steps', type=int, default=15)
@@ -208,16 +210,25 @@ def main():
     # Stage dispatch.
     hw3_3 = {'baseline_random', 'clip_random', 'sched_random',
              'huber_random', 'full_random'}
-    if args.exp in hw3_3:
+    hw3_4 = {'combined_random', 'rainbow_random'}
+    if args.exp in hw3_4:
+        stage_dir = 'HW3-4'
+    elif args.exp in hw3_3:
         stage_dir = 'HW3-3'
     elif args.exp.endswith('_player'):
         stage_dir = 'HW3-2'
     else:
         stage_dir = 'HW3-1'
 
-    # Model factory: Dueling for HW3-2 dueling/combined and all HW3-3 cells.
-    dueling_exps = {'dueling_player', 'combined_player'} | hw3_3
-    factory = build_dueling_model if args.exp in dueling_exps else build_model
+    # Model factory: Rainbow for HW3-4 rainbow; Dueling for HW3-2 dueling/
+    # combined, all HW3-3 cells, and HW3-4 combined_random; plain MLP otherwise.
+    if args.exp == 'rainbow_random':
+        from src.rainbow import build_rainbow_model
+        factory = build_rainbow_model
+    else:
+        dueling_exps = {'dueling_player', 'combined_player',
+                        'combined_random'} | hw3_3
+        factory = build_dueling_model if args.exp in dueling_exps else build_model
 
     yscale = 'log' if 'naive' in args.exp else 'linear'
     out = make_dashboard_gif(
