@@ -139,8 +139,9 @@ def test_rollout_dataset_plays_one_game_per_iter():
     # mem_size cap), proving the deque persists across iter calls.
     batches_2 = list(iter(ds))
     assert len(ds.replay) >= n_buf_after_game_1   # persisted, did not reset
-    # static mode + ε=1.0 + max_moves=15: one game ≤ 15 transitions.
-    assert n_buf_after_game_1 <= 15
+    # static mode + ε=1.0 + max_moves=15: one game ≤ 16 transitions
+    # (`mov > max_moves` lets one extra step through, matching HW3-1/2 semantics).
+    assert n_buf_after_game_1 <= 16
 
 
 def test_rollout_dataset_yields_minibatches_when_buffer_full():
@@ -186,8 +187,9 @@ def test_rollout_dataset_uses_online_model_for_action_selection():
     ds = RolloutDataset(online_model=online, mode='static', mem_size=100,
                         batch_size=10, max_moves=8, epsilon=0.0)
     list(iter(ds))
-    # Each move calls online once for action selection. One game ≤ 8 moves.
-    assert 1 <= calls['n'] <= 8
+    # Each move calls online once for action selection. One game ≤ 9 calls
+    # (`mov > max_moves` lets one extra step through, matching HW3-1/2 semantics).
+    assert 1 <= calls['n'] <= 9
 ```
 
 - [ ] **Step 2.2: Run tests to verify they fail**
