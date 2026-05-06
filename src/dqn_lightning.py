@@ -11,8 +11,7 @@ import torch
 import torch.nn as nn
 from torch.utils.data import IterableDataset, DataLoader
 
-import pytorch_lightning as pl
-from pytorch_lightning import LightningModule, Trainer
+from pytorch_lightning import LightningModule, Trainer, seed_everything
 from pytorch_lightning.callbacks import Callback
 
 from src.dqn_naive import _plot_loss
@@ -181,7 +180,7 @@ def train_lightning(
     same artifact set as HW3-2 variants. Returns metrics dict.
     """
     set_seed(seed)
-    pl.seed_everything(seed, workers=True)
+    seed_everything(seed, workers=True)
     out_path = Path(out_dir)
     snapshots_dir = out_path / 'snapshots'
     snapshots_dir.mkdir(parents=True, exist_ok=True)
