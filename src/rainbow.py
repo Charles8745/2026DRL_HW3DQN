@@ -100,3 +100,95 @@ class NoisyLinear(nn.Module):
             w = self.weight_mu
             b = self.bias_mu
         return F.linear(x, w, b)
+
+
+# ============================================================
+# Block 2 — DistributionalDuelingMLP (Noisy + Dueling + C51)
+# ============================================================
+
+
+class DistributionalDuelingMLP(nn.Module):
+    """Categorical (C51) Dueling network with NoisyLinear in V/A heads.
+
+    Architecture:
+        trunk (64 -> 150 -> 100, plain ReLU MLP, NO noise — pure representation)
+        V head:  NoisyLinear(100->hidden) -> ReLU -> NoisyLinear(hidden -> 1*n_atoms)
+        A head:  NoisyLinear(100->hidden) -> ReLU -> NoisyLinear(hidden -> n_actions*n_atoms)
+
+    Distribution per atom (Bellemare 2017, Wang 2016 dueling aggregation):
+        q_logits(s, a, i) = V(s, i) + A(s, a, i) - mean_a A(s, a, i)
+        p_i(s, a) = softmax_atoms(q_logits(s, a, .))
+        Q(s, a) = sum_i z_i * p_i(s, a)        # used by greedy action selection
+
+    forward(x)       -> (B, n_actions) expected Q (interface-compatible with HW3-1/2/3)
+    forward_dist(x)  -> (B, n_actions, n_atoms)
+    """
+
+    def __init__(self,
+                 n_atoms: int = 51,
+                 v_min: float = -10.0,
+                 v_max: float = 10.0,
+                 in_dim: int = 64,
+                 hidden1: int = 150,
+                 hidden2: int = 100,
+                 head_hidden: int = 128,
+                 n_actions: int = 4,
+                 sigma_init: float = 0.5):
+        super().__init__()
+        self.n_atoms = n_atoms
+        self.n_actions = n_actions
+        self.v_min = v_min
+        self.v_max = v_max
+
+        support = torch.linspace(v_min, v_max, n_atoms)
+        self.register_buffer('support', support)
+        self.register_buffer('delta_z',
+                             torch.tensor((v_max - v_min) / (n_atoms - 1)))
+
+        self.trunk = nn.Sequential(
+            nn.Linear(in_dim, hidden1), nn.ReLU(),
+            nn.Linear(hidden1, hidden2), nn.ReLU(),
+        )
+        self.value_head = nn.Sequential(
+            NoisyLinear(hidden2, head_hidden, sigma_init=sigma_init),
+            nn.ReLU(),
+            NoisyLinear(head_hidden, n_atoms, sigma_init=sigma_init),
+        )
+        self.advantage_head = nn.Sequential(
+            NoisyLinear(hidden2, head_hidden, sigma_init=sigma_init),
+            nn.ReLU(),
+            NoisyLinear(head_hidden, n_actions * n_atoms, sigma_init=sigma_init),
+        )
+
+    def forward_dist(self, x: torch.Tensor) -> torch.Tensor:
+        h = self.trunk(x)
+        v = self.value_head(h).view(-1, 1, self.n_atoms)             # (B,1,A_atom)
+        a = self.advantage_head(h).view(-1, self.n_actions, self.n_atoms)
+        a_mean = a.mean(dim=1, keepdim=True)                         # (B,1,n_atoms)
+        q_logits = v + (a - a_mean)                                  # (B,n_act,n_atom)
+        return F.softmax(q_logits, dim=-1)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        dist = self.forward_dist(x)                                  # (B,n_act,n_atom)
+        return (dist * self.support).sum(dim=-1)                     # (B,n_act)
+
+    def reset_noise(self) -> None:
+        for m in self.modules():
+            if isinstance(m, NoisyLinear):
+                m.reset_noise()
+
+
+def build_rainbow_model(n_atoms: int = 51, v_min: float = -10.0,
+                         v_max: float = 10.0, in_dim: int = 64,
+                         hidden1: int = 150, hidden2: int = 100,
+                         head_hidden: int = 128, n_actions: int = 4,
+                         sigma_init: float = 0.5) -> DistributionalDuelingMLP:
+    """Factory used by `animate.py` for snapshot loading. Must be callable
+    without arguments and produce a model whose state_dict matches the one
+    saved during training (so default kwargs here MUST match the defaults in
+    `train_rainbow`)."""
+    return DistributionalDuelingMLP(
+        n_atoms=n_atoms, v_min=v_min, v_max=v_max,
+        in_dim=in_dim, hidden1=hidden1, hidden2=hidden2,
+        head_hidden=head_hidden, n_actions=n_actions, sigma_init=sigma_init,
+    )

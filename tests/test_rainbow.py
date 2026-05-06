@@ -71,3 +71,61 @@ def test_noisy_linear_train_mode_uses_noise():
     y2 = layer(x).clone()
     # With fresh noise + non-zero sigma, outputs should differ.
     assert not torch.equal(y1, y2)
+
+
+# ============================================================
+# DistributionalDuelingMLP tests
+# ============================================================
+
+def test_distributional_model_forward_shapes():
+    """forward(state) -> (B, n_actions); forward_dist(state) -> (B, n_actions, n_atoms)."""
+    from src.rainbow import build_rainbow_model
+
+    model = build_rainbow_model()
+    x = torch.randn(8, 64)
+    q = model(x)
+    dist = model.forward_dist(x)
+    assert q.shape == (8, 4)
+    assert dist.shape == (8, 4, 51)
+
+
+def test_distributional_model_dist_is_valid_probability():
+    """Each (B, action) row of forward_dist must sum to ~1 (softmax over atoms)
+    and contain only non-negative entries."""
+    from src.rainbow import build_rainbow_model
+
+    model = build_rainbow_model()
+    x = torch.randn(4, 64)
+    dist = model.forward_dist(x)
+    assert (dist >= 0).all()
+    sums = dist.sum(dim=-1)
+    assert torch.allclose(sums, torch.ones_like(sums), atol=1e-5)
+
+
+def test_distributional_model_expected_q_matches_dist_dot_support():
+    """forward(s) should equal sum_i z_i * dist(s, ., i), where z is the
+    fixed support buffer."""
+    from src.rainbow import build_rainbow_model
+
+    model = build_rainbow_model()
+    x = torch.randn(2, 64)
+    dist = model.forward_dist(x)
+    q_from_dist = (dist * model.support).sum(dim=-1)   # (B, 4)
+    q_direct = model(x)
+    assert torch.allclose(q_from_dist, q_direct, atol=1e-6)
+
+
+def test_distributional_model_reset_noise_propagates():
+    """model.reset_noise() must call reset_noise on every NoisyLinear inside it.
+    Detect by checking that at least one NoisyLinear's weight_epsilon changes."""
+    from src.rainbow import build_rainbow_model, NoisyLinear
+
+    torch.manual_seed(0)
+    model = build_rainbow_model()
+    noisy_layers = [m for m in model.modules() if isinstance(m, NoisyLinear)]
+    assert len(noisy_layers) >= 4   # 2 V-head layers + 2 A-head layers
+    eps_before = [m.weight_epsilon.clone() for m in noisy_layers]
+    model.reset_noise()
+    eps_after = [m.weight_epsilon for m in noisy_layers]
+    differences = [not torch.equal(b, a) for b, a in zip(eps_before, eps_after)]
+    assert all(differences)
