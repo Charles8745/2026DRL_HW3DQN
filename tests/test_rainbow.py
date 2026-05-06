@@ -129,3 +129,70 @@ def test_distributional_model_reset_noise_propagates():
     eps_after = [m.weight_epsilon for m in noisy_layers]
     differences = [not torch.equal(b, a) for b, a in zip(eps_before, eps_after)]
     assert all(differences)
+
+
+# ============================================================
+# SumTree tests
+# ============================================================
+
+def test_sum_tree_total_is_sum_of_priorities():
+    """After 5 adds, .total must equal the sum of priorities."""
+    from src.rainbow import SumTree
+
+    tree = SumTree(capacity=8)
+    priorities = [1.0, 2.0, 3.0, 4.0, 5.0]
+    for i, p in enumerate(priorities):
+        tree.add(p, data=f'item-{i}')
+    assert abs(tree.total - sum(priorities)) < 1e-6
+
+
+def test_sum_tree_sample_finds_correct_leaf():
+    """Given priorities [1, 2, 3] (cum: 1, 3, 6), sample(0.5) -> idx 0;
+    sample(2) -> idx 1; sample(5) -> idx 2."""
+    from src.rainbow import SumTree
+
+    tree = SumTree(capacity=4)
+    tree.add(1.0, 'a')
+    tree.add(2.0, 'b')
+    tree.add(3.0, 'c')
+    _, _, data_a = tree.sample(0.5)
+    _, _, data_b = tree.sample(2.0)
+    _, _, data_c = tree.sample(5.0)
+    assert data_a == 'a'
+    assert data_b == 'b'
+    assert data_c == 'c'
+
+
+def test_sum_tree_update_changes_total_and_redirects_sampling():
+    """Updating a leaf's priority must update the running total and the
+    sampling distribution."""
+    from src.rainbow import SumTree
+
+    tree = SumTree(capacity=4)
+    tree.add(1.0, 'a')
+    tree.add(1.0, 'b')
+    idx_b, _, _ = tree.sample(1.5)   # b is at cumulative range [1, 2)
+    assert tree.total == 2.0
+    tree.update(idx_b, 9.0)
+    assert abs(tree.total - 10.0) < 1e-6
+    # Now b dominates the distribution; sample(5.0) should fall on b.
+    _, _, data = tree.sample(5.0)
+    assert data == 'b'
+
+
+def test_sum_tree_overwrites_oldest_when_full():
+    """Adding past capacity must overwrite the oldest leaf circularly."""
+    from src.rainbow import SumTree
+
+    tree = SumTree(capacity=2)
+    tree.add(1.0, 'a')
+    tree.add(2.0, 'b')
+    tree.add(3.0, 'c')   # overwrites 'a'
+    # total now = 2 + 3 = 5
+    assert abs(tree.total - 5.0) < 1e-6
+    # Confirm 'a' is gone: sample full range, must hit only 'b' or 'c'.
+    seen = set()
+    for s in [0.5, 1.5, 2.5, 3.5, 4.5]:
+        _, _, data = tree.sample(s)
+        seen.add(data)
+    assert 'a' not in seen

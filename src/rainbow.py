@@ -192,3 +192,69 @@ def build_rainbow_model(n_atoms: int = 51, v_min: float = -10.0,
         in_dim=in_dim, hidden1=hidden1, hidden2=hidden2,
         head_hidden=head_hidden, n_actions=n_actions, sigma_init=sigma_init,
     )
+
+
+# ============================================================
+# Block 3 — SumTree (binary heap-style array, O(log N) ops)
+# ============================================================
+
+
+class SumTree:
+    """Binary-tree-as-array data structure for prioritized sampling.
+
+    Layout for capacity N (power of 2 not required; we round up):
+        nodes[0]                        — root (= total priority)
+        nodes[1..N-2]                   — internal sums
+        nodes[N-1 .. 2N-2]              — leaves (priorities)
+        data[0 .. N-1]                  — payloads keyed to leaves
+
+    All ops are O(log N).  Used as the inner data structure of
+    PrioritizedReplayBuffer; not intended for direct external use.
+    """
+
+    def __init__(self, capacity: int):
+        self.capacity = int(capacity)
+        self.nodes = np.zeros(2 * self.capacity - 1, dtype=np.float64)
+        self.data = [None] * self.capacity
+        self._write = 0   # circular write pointer
+        self._n = 0       # number of leaves currently filled
+
+    @property
+    def total(self) -> float:
+        return float(self.nodes[0])
+
+    def __len__(self) -> int:
+        return self._n
+
+    def add(self, priority: float, data) -> None:
+        """Append (priority, data); overwrite oldest if full."""
+        leaf_idx = self._write + self.capacity - 1
+        self.data[self._write] = data
+        self.update(leaf_idx, float(priority))
+        self._write = (self._write + 1) % self.capacity
+        self._n = min(self._n + 1, self.capacity)
+
+    def update(self, leaf_idx: int, priority: float) -> None:
+        """Rewrite a leaf priority; propagate the delta to ancestors."""
+        delta = float(priority) - self.nodes[leaf_idx]
+        self.nodes[leaf_idx] = float(priority)
+        idx = leaf_idx
+        while idx > 0:
+            idx = (idx - 1) // 2
+            self.nodes[idx] += delta
+
+    def sample(self, s: float) -> tuple[int, float, object]:
+        """Walk from root to leaf following the prefix-sum target s.
+        Returns (leaf_idx, priority, data)."""
+        idx = 0
+        # Internal nodes occupy [0, capacity - 2]; leaves [capacity-1, ...].
+        while idx < self.capacity - 1:
+            left = 2 * idx + 1
+            right = left + 1
+            if s <= self.nodes[left]:
+                idx = left
+            else:
+                s -= self.nodes[left]
+                idx = right
+        data_idx = idx - (self.capacity - 1)
+        return idx, float(self.nodes[idx]), self.data[data_idx]
