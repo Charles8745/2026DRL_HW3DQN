@@ -1,0 +1,39 @@
+{
+  "stage": "HW3-4: Rainbow DQN for random mode",
+  "experiment": "rainbow_random",
+  "mode": "random",
+  "method": "rainbow",
+  "components": {
+    "double": true,
+    "dueling": true,
+    "per": true,
+    "n_step": true,
+    "distributional": true,
+    "noisy": true
+  },
+  "hyperparams": {
+    "epochs": 5000,
+    "gamma": 0.9,
+    "lr": 0.0001,
+    "mem_size": 10000,
+    "batch_size": 200,
+    "max_moves": 50,
+    "sync_freq": 500,
+    "seed": 42,
+    "snapshot_every": 250,
+    "n_step": 3,
+    "n_atoms": 51,
+    "v_min": -10.0,
+    "v_max": 10.0,
+    "alpha": 0.5,
+    "beta_start": 0.4,
+    "beta_end": 1.0,
+    "sigma_init": 0.5
+  },
+  "final_loss_mean_last_100": 0.6408942341804504,
+  "final_loss_std_last_100": 0.22289952635765076,
+  "win_rate": 0.217,
+  "avg_steps_per_win": 2.046082949308756,
+  "n_eval_games": 1000,
+  "training_wall_time_sec": 511.8217737674713
+}
