@@ -266,3 +266,74 @@ def test_per_buffer_update_priorities_shifts_distribution():
     target_payload = buf.tree.data[target_payload_index]
     matches = sum(1 for t in transitions if t == target_payload)
     assert matches >= 25
+
+
+# ============================================================
+# NStepBuffer tests
+# ============================================================
+
+def test_n_step_buffer_returns_none_until_n_filled():
+    """With n=3, the first 2 appends return None; the 3rd returns the
+    first n-step transition."""
+    from src.rainbow import NStepBuffer
+
+    buf = NStepBuffer(n=3, gamma=0.9)
+    s = torch.zeros(1, 64)
+    out0 = buf.append(s, 0, -1.0, s, False)
+    out1 = buf.append(s, 1, -1.0, s, False)
+    out2 = buf.append(s, 2, +10.0, s, True)
+    assert out0 is None
+    assert out1 is None
+    assert out2 is not None
+    s1, a, R_n, s_next, d = out2
+    # n-step return: -1 + 0.9*(-1) + 0.9^2*10 = -1.9 + 8.1 = 6.2
+    assert abs(R_n - 6.2) < 1e-6
+    assert a == 0     # action of the OLDEST transition in the window
+    assert d is True  # tail done -> downstream target uses 0
+    assert torch.equal(s_next, s)
+
+
+def test_n_step_buffer_truncates_on_done():
+    """If done at step 1 (before filling n), append should not return until
+    flush; flush returns the truncated n-step starting at step 0."""
+    from src.rainbow import NStepBuffer
+
+    buf = NStepBuffer(n=3, gamma=0.9)
+    s = torch.zeros(1, 64)
+    out0 = buf.append(s, 0, -1.0, s, False)
+    out1 = buf.append(s, 7, +10.0, s, True)
+    assert out0 is None
+    assert out1 is None
+    flushed = list(buf.flush())
+    assert len(flushed) == 2          # one for action 0, one for action 7
+    s1, a0, R0, _, d0 = flushed[0]
+    assert a0 == 0
+    # Truncated 2-step: -1 + 0.9*10 = 8.0
+    assert abs(R0 - 8.0) < 1e-6
+    assert d0 is True
+    s1b, a1, R1, _, d1 = flushed[1]
+    assert a1 == 7
+    assert abs(R1 - 10.0) < 1e-6
+    assert d1 is True
+
+
+def test_n_step_buffer_continues_after_full_window():
+    """After 3 fills + 1 more append, every subsequent append yields a new
+    n-step transition (sliding window)."""
+    from src.rainbow import NStepBuffer
+
+    buf = NStepBuffer(n=3, gamma=0.9)
+    s = torch.zeros(1, 64)
+    outs = []
+    for i in range(5):
+        out = buf.append(s, i, -1.0, s, False)
+        outs.append(out)
+    # outs[0], outs[1] are None; outs[2..4] are valid n-step transitions.
+    assert outs[0] is None
+    assert outs[1] is None
+    for o in outs[2:]:
+        assert o is not None
+    # action field tracks the OLDEST transition in the window:
+    assert outs[2][1] == 0
+    assert outs[3][1] == 1
+    assert outs[4][1] == 2

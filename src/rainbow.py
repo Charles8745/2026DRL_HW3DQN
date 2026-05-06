@@ -329,3 +329,64 @@ class PrioritizedReplayBuffer:
             self.tree.update(idx, p)
             if p > self._max_priority:
                 self._max_priority = p
+
+
+# ============================================================
+# Block 5 — NStepBuffer (n-step bootstrapping)
+# ============================================================
+
+
+class NStepBuffer:
+    """Sliding window of size n that emits n-step transitions.
+
+    Each `append(s, a, r, s_next, done)`:
+      - if window has n items: emits an n-step transition for the OLDEST item,
+        slides forward; otherwise returns None.
+      - if `done` is True: the window's tail is locked to (s_next, done=True),
+        and `flush()` will yield truncated n-step transitions for all remaining
+        items in the window.
+    """
+
+    def __init__(self, n: int = 3, gamma: float = 0.9):
+        self.n = n
+        self.gamma = gamma
+        self.window: deque = deque(maxlen=n)
+        self._terminal_tail = None        # (s_next, True) once done observed
+
+    def append(self, s, a, r, s_next, done):
+        """Push a 1-step transition. Returns an n-step transition (s, a, R^(n),
+        s_{t+n}, d_{t+n}) when a full window is ready, else None.
+        On done, tail-locks so flush() drains remaining items; if the window
+        is already full at done time, the n-step transition is emitted first."""
+        self.window.append((s, a, float(r), s_next, bool(done)))
+        if done:
+            self._terminal_tail = (s_next, True)
+            if len(self.window) == self.n:
+                return self._make_n_step(self.window)
+            return None
+        if len(self.window) < self.n:
+            return None
+        return self._make_n_step(self.window)
+
+    def _make_n_step(self, window):
+        """Compute (s_t, a_t, R^(n), s_{t+n}, d_{t+n}) from a sliding window."""
+        s_t, a_t, _, _, _ = window[0]
+        R = 0.0
+        gamma_k = 1.0
+        s_next, d = window[-1][3], window[-1][4]
+        # If window contains a done before its end, truncate at done.
+        for k, (_, _, r_k, s_k_next, d_k) in enumerate(window):
+            R += gamma_k * r_k
+            gamma_k *= self.gamma
+            if d_k:
+                s_next, d = s_k_next, True
+                break
+        return (s_t, a_t, R, s_next, d)
+
+    def flush(self):
+        """At episode end, yield truncated n-step transitions for all remaining
+        items in the window. Caller invokes after a `done=True` append."""
+        while self.window:
+            yield self._make_n_step(self.window)
+            self.window.popleft()
+        self._terminal_tail = None
