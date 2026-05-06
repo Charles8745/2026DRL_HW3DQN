@@ -1,0 +1,32 @@
+{
+  "stage": "HW3-3: Lightning-converted DQN with Training Tricks for random mode",
+  "experiment": "sched_random",
+  "mode": "random",
+  "method": "lightning_combined",
+  "tricks": {
+    "clip": false,
+    "sched": true,
+    "huber": false
+  },
+  "hyperparams": {
+    "epochs": 5000,
+    "gamma": 0.9,
+    "epsilon": 0.3,
+    "lr": 0.001,
+    "mem_size": 1000,
+    "batch_size": 200,
+    "max_moves": 50,
+    "sync_freq": 500,
+    "seed": 42,
+    "snapshot_every": 250,
+    "gradient_clip_val": null,
+    "lr_scheduler": "CosineAnnealingLR(eta_min=1e-5)",
+    "loss_fn": "MSELoss"
+  },
+  "final_loss_mean_last_100": 1.5261015892028809,
+  "final_loss_std_last_100": 0.2997906506061554,
+  "win_rate": 0.874,
+  "avg_steps_per_win": 2.643020594965675,
+  "n_eval_games": 1000,
+  "training_wall_time_sec": 32.2838249206543
+}
