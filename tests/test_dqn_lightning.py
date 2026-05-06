@@ -211,3 +211,63 @@ def test_snapshot_callback_state_dict_loads_into_dueling_model(tmp_path):
     sd = torch.load(snaps_dir / 'epoch_0001.pth', weights_only=True)
     fresh = build_dueling_model()
     fresh.load_state_dict(sd)        # must not raise
+
+
+# -------- train_lightning end-to-end smoke --------
+
+
+@pytest.mark.parametrize("clip,sched,huber,tag", [
+    (False, False, False, 'baseline'),
+    (True,  False, False, 'clip'),
+    (False, True,  False, 'sched'),
+    (False, False, True,  'huber'),
+    (True,  True,  True,  'full'),
+])
+def test_train_lightning_smoke(tmp_path, clip, sched, huber, tag):
+    """Tiny-budget end-to-end run for each ablation cell. Verifies all
+    artifacts are produced and metrics record the trick state correctly.
+    """
+    from src.dqn_lightning import train_lightning, STAGE_LABEL
+
+    out_dir = tmp_path / f'{tag}_static'
+    metrics = train_lightning(
+        epochs=4,
+        mem_size=20,
+        batch_size=4,
+        max_moves=8,
+        sync_freq=2,
+        snapshot_every=2,
+        mode='static',
+        seed=0,
+        out_dir=str(out_dir),
+        eval_n_games=2,
+        clip=clip, sched=sched, huber=huber,
+    )
+
+    assert metrics['stage'] == STAGE_LABEL
+    assert metrics['method'] == 'lightning_combined'
+    assert metrics['mode'] == 'static'
+    assert metrics['tricks'] == {'clip': clip, 'sched': sched, 'huber': huber}
+    assert metrics['hyperparams']['gradient_clip_val'] == (10.0 if clip else None)
+    assert metrics['hyperparams']['loss_fn'] == ('SmoothL1Loss' if huber else 'MSELoss')
+    if sched:
+        assert 'CosineAnnealingLR' in metrics['hyperparams']['lr_scheduler']
+    else:
+        assert metrics['hyperparams']['lr_scheduler'] is None
+
+    # Artifact set matches HW3-1/2.
+    assert (out_dir / 'checkpoint.pth').exists()
+    assert (out_dir / 'losses.npy').exists()
+    assert (out_dir / 'loss.png').exists()
+    assert (out_dir / 'metrics.json').exists()
+    assert (out_dir / 'snapshots').is_dir()
+
+    # Snapshots load round-trip into a DuelingMLP. With epochs=4 and
+    # snapshot_every=2, SnapshotCallback fires at games 2 and 4; epoch_0000.pth
+    # is also saved before training starts, so exactly 3 snapshots exist —
+    # this exercises the SnapshotCallback integration, not just initial save.
+    snaps = sorted(os.listdir(out_dir / 'snapshots'))
+    assert len(snaps) == 3
+    for s in snaps:
+        sd = torch.load(out_dir / 'snapshots' / s, weights_only=True)
+        build_dueling_model().load_state_dict(sd)

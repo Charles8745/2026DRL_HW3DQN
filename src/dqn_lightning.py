@@ -5,7 +5,6 @@ import random
 import time
 from collections import deque
 from pathlib import Path
-from typing import Optional
 
 import numpy as np
 import torch
@@ -157,3 +156,149 @@ class SnapshotCallback(Callback):
                 pl_module.online.state_dict(),
                 self.snapshots_dir / f'epoch_{self._game:04d}.pth',
             )
+
+
+def train_lightning(
+    *,
+    epochs: int = 5000,
+    gamma: float = 0.9,
+    epsilon: float = 0.3,
+    lr: float = 1e-3,
+    mem_size: int = 1000,
+    batch_size: int = 200,
+    max_moves: int = 50,
+    sync_freq: int = 500,
+    mode: str = 'random',
+    seed: int = 42,
+    snapshot_every: int = 250,
+    out_dir: str = 'results/HW3-3/baseline_random',
+    eval_n_games: int = 1000,
+    clip: bool = False,
+    sched: bool = False,
+    huber: bool = False,
+) -> dict:
+    """Train Lightning-wrapped Combined DQN with optional tricks. Saves the
+    same artifact set as HW3-2 variants. Returns metrics dict.
+    """
+    set_seed(seed)
+    pl.seed_everything(seed, workers=True)
+    out_path = Path(out_dir)
+    snapshots_dir = out_path / 'snapshots'
+    snapshots_dir.mkdir(parents=True, exist_ok=True)
+
+    module = DQNLightningModule(
+        lr=lr, gamma=gamma, sync_freq=sync_freq, epochs=epochs,
+        sched=sched, huber=huber,
+    )
+    torch.save(module.online.state_dict(), snapshots_dir / 'epoch_0000.pth')
+
+    dataset = RolloutDataset(
+        online_model=module.online, mode=mode, mem_size=mem_size,
+        batch_size=batch_size, max_moves=max_moves, epsilon=epsilon,
+    )
+    loader = DataLoader(dataset, batch_size=None, num_workers=0)
+
+    trainer = Trainer(
+        max_epochs=epochs,
+        gradient_clip_val=10.0 if clip else 0.0,
+        gradient_clip_algorithm='norm' if clip else None,
+        callbacks=[SnapshotCallback(snapshots_dir, snapshot_every)],
+        enable_progress_bar=True,
+        enable_checkpointing=False,
+        logger=False,
+        accelerator='cpu',
+        devices=1,
+    )
+    t0 = time.time()
+    trainer.fit(module, loader)
+    wall_time = time.time() - t0
+
+    torch.save(module.online.state_dict(), out_path / 'checkpoint.pth')
+    losses_arr = np.array(module.training_losses, dtype=np.float32)
+    np.save(out_path / 'losses.npy', losses_arr)
+    title_bits = []
+    if clip: title_bits.append('clip')
+    if sched: title_bits.append('sched')
+    if huber: title_bits.append('huber')
+    title_tag = '+'.join(title_bits) if title_bits else 'baseline'
+    _plot_loss(losses_arr, out_path / 'loss.png',
+               title=f'Lightning Combined ({title_tag}, {mode}) — training loss')
+
+    eval_result = evaluate(module.online, mode=mode, n_games=eval_n_games)
+    tail = losses_arr[-100:] if len(losses_arr) >= 100 else losses_arr
+    metrics = {
+        'stage': STAGE_LABEL,
+        'experiment': out_path.name,
+        'mode': mode,
+        'method': 'lightning_combined',
+        'tricks': {'clip': clip, 'sched': sched, 'huber': huber},
+        'hyperparams': {
+            'epochs': epochs, 'gamma': gamma, 'epsilon': epsilon, 'lr': lr,
+            'mem_size': mem_size, 'batch_size': batch_size,
+            'max_moves': max_moves, 'sync_freq': sync_freq, 'seed': seed,
+            'snapshot_every': snapshot_every,
+            'gradient_clip_val': 10.0 if clip else None,
+            'lr_scheduler': 'CosineAnnealingLR(eta_min=1e-5)' if sched else None,
+            'loss_fn': 'SmoothL1Loss' if huber else 'MSELoss',
+        },
+        'final_loss_mean_last_100': float(tail.mean()) if len(tail) else 0.0,
+        'final_loss_std_last_100': float(tail.std()) if len(tail) else 0.0,
+        'win_rate': eval_result['win_rate'],
+        'avg_steps_per_win': eval_result['avg_steps_per_win'],
+        'n_eval_games': eval_result['n_games'],
+        'training_wall_time_sec': float(wall_time),
+    }
+    save_metrics(str(out_path / 'metrics.json'), **metrics)
+    return metrics
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description='Lightning Combined DQN with optional training tricks (HW3-3).')
+    parser.add_argument('--mode', default='random',
+                        choices=['static', 'player', 'random'])
+    parser.add_argument('--epochs', type=int, default=5000)
+    parser.add_argument('--gamma', type=float, default=0.9)
+    parser.add_argument('--epsilon', type=float, default=0.3)
+    parser.add_argument('--lr', type=float, default=1e-3)
+    parser.add_argument('--mem-size', type=int, default=1000)
+    parser.add_argument('--batch-size', type=int, default=200)
+    parser.add_argument('--max-moves', type=int, default=50)
+    parser.add_argument('--sync-freq', type=int, default=500)
+    parser.add_argument('--seed', type=int, default=42)
+    parser.add_argument('--snapshot-every', type=int, default=250)
+    parser.add_argument('--clip', action='store_true',
+                        help='Enable gradient norm clipping (max_norm=10.0).')
+    parser.add_argument('--sched', action='store_true',
+                        help='Enable CosineAnnealingLR (eta_min=1e-5).')
+    parser.add_argument('--huber', action='store_true',
+                        help='Use Huber loss (SmoothL1Loss) instead of MSE.')
+    parser.add_argument('--out-dir', default=None,
+                        help='Default: auto-named from trick combo.')
+    args = parser.parse_args()
+
+    if args.out_dir:
+        out_dir = args.out_dir
+    else:
+        active = [n for n, on in (('clip', args.clip), ('sched', args.sched),
+                                  ('huber', args.huber)) if on]
+        if not active:
+            tag = 'baseline'
+        elif len(active) == 3:
+            tag = 'full'
+        else:
+            tag = '_'.join(active)
+        out_dir = f'results/HW3-3/{tag}_{args.mode}'
+
+    train_lightning(
+        epochs=args.epochs, gamma=args.gamma, epsilon=args.epsilon, lr=args.lr,
+        mem_size=args.mem_size, batch_size=args.batch_size,
+        max_moves=args.max_moves, sync_freq=args.sync_freq,
+        mode=args.mode, seed=args.seed,
+        snapshot_every=args.snapshot_every, out_dir=out_dir,
+        clip=args.clip, sched=args.sched, huber=args.huber,
+    )
+
+
+if __name__ == '__main__':
+    main()
