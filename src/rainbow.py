@@ -258,3 +258,74 @@ class SumTree:
                 idx = right
         data_idx = idx - (self.capacity - 1)
         return idx, float(self.nodes[idx]), self.data[data_idx]
+
+
+# ============================================================
+# Block 4 — PrioritizedReplayBuffer (Schaul 2016)
+# ============================================================
+
+
+class PrioritizedReplayBuffer:
+    """Proportional-prioritized replay using SumTree.
+
+    p_i = (|delta_i| + epsilon) ** alpha     # priorities (delta = TD-style error)
+    P(i) = p_i / sum_j p_j                   # sampling probability
+    w_i = (1/N * 1/P(i)) ** beta             # IS weight, normalised by max
+
+    beta is annealed linearly from beta_start to beta_end as a function of
+    `frac` in [0, 1] (caller supplies frac = current_epoch / total_epochs).
+    """
+
+    def __init__(self, capacity: int, alpha: float = 0.5,
+                 beta_start: float = 0.4, beta_end: float = 1.0,
+                 epsilon: float = 1e-6):
+        self.tree = SumTree(capacity)
+        self.alpha = alpha
+        self.beta_start = beta_start
+        self.beta_end = beta_end
+        self.epsilon = epsilon
+        self._max_priority = 1.0   # initial max so first item is non-zero
+
+    def __len__(self) -> int:
+        return len(self.tree)
+
+    def _priority(self, td_error: float) -> float:
+        return (abs(td_error) + self.epsilon) ** self.alpha
+
+    def push(self, transition) -> None:
+        """Insert a new transition with current max priority (so it is at
+        least sampled once before priority is updated by training)."""
+        self.tree.add(self._max_priority, transition)
+
+    def sample(self, batch_size: int, frac: float):
+        """Stratified sampling: split [0, total] into batch_size equal
+        segments; sample one s in each. Returns (transitions, indices,
+        IS-weight tensor of shape (batch_size,))."""
+        beta = self.beta_start + (self.beta_end - self.beta_start) * min(1.0, frac)
+        seg = self.tree.total / batch_size
+        transitions = []
+        indices = []
+        priorities = []
+        for i in range(batch_size):
+            lo = seg * i
+            hi = seg * (i + 1)
+            s = random.uniform(lo, hi)
+            idx, p, data = self.tree.sample(s)
+            transitions.append(data)
+            indices.append(idx)
+            priorities.append(p)
+        priorities = np.array(priorities, dtype=np.float64)
+        # Numerical guard: empty / zero-sum trees shouldn't happen by the time
+        # caller invokes this (caller checks len(buf) > batch_size first).
+        probs = priorities / max(self.tree.total, 1e-12)
+        weights = (len(self.tree) * probs) ** (-beta)
+        weights = weights / max(weights.max(), 1e-12)
+        return transitions, indices, torch.tensor(weights, dtype=torch.float32)
+
+    def update_priorities(self, indices, td_errors) -> None:
+        """Rewrite leaf priorities; track running max so future pushes inherit it."""
+        for idx, err in zip(indices, td_errors):
+            p = self._priority(float(err))
+            self.tree.update(idx, p)
+            if p > self._max_priority:
+                self._max_priority = p

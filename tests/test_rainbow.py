@@ -196,3 +196,73 @@ def test_sum_tree_overwrites_oldest_when_full():
         _, _, data = tree.sample(s)
         seen.add(data)
     assert 'a' not in seen
+
+
+# ============================================================
+# PrioritizedReplayBuffer tests
+# ============================================================
+
+def _dummy_transition(reward=-1.0, done=False):
+    s = torch.zeros(1, 64)
+    return (s, 0, reward, s, done)
+
+
+def test_per_buffer_push_then_sample_shapes():
+    """push 50 transitions, sample 8: must return (transitions, indices, weights)
+    with len(transitions) == 8 and weights in (0, 1]."""
+    from src.rainbow import PrioritizedReplayBuffer
+
+    buf = PrioritizedReplayBuffer(capacity=64, alpha=0.5,
+                                   beta_start=0.4, beta_end=1.0)
+    for _ in range(50):
+        buf.push(_dummy_transition())
+    transitions, idxs, w = buf.sample(8, frac=0.0)
+    assert len(transitions) == 8
+    assert len(idxs) == 8
+    assert w.shape == (8,)
+    assert (w > 0).all() and (w <= 1.0 + 1e-6).all()
+
+
+def test_per_buffer_new_transition_gets_max_priority():
+    """A freshly pushed transition should be sampled at least once if we
+    ask for n samples >= n_existing — because new items inherit max priority,
+    not zero. Concretely: push 10 items, set first 9 to tiny priority,
+    push the 10th — the 10th must dominate sampling."""
+    from src.rainbow import PrioritizedReplayBuffer
+    import random
+    import numpy as np
+
+    random.seed(0)
+    np.random.seed(0)
+    buf = PrioritizedReplayBuffer(capacity=16, alpha=1.0,
+                                   beta_start=0.4, beta_end=1.0)
+    for i in range(9):
+        buf.push((f'old-{i}',))
+    # Drop priorities of the 9 existing leaves to a tiny value so the next
+    # push (which inherits current max) clearly dominates.
+    transitions_before, idxs_before, _ = buf.sample(9, frac=0.0)
+    for idx in idxs_before:
+        buf.tree.update(idx, 1e-6)
+    buf.push(('new',))
+    transitions_after, _, _ = buf.sample(50, frac=0.0)
+    payloads = [t[0] for t in transitions_after]
+    assert payloads.count('new') >= 25  # dominates roughly half of samples
+
+
+def test_per_buffer_update_priorities_shifts_distribution():
+    """Update one leaf's priority way up; subsequent sampling skews to it."""
+    from src.rainbow import PrioritizedReplayBuffer
+
+    buf = PrioritizedReplayBuffer(capacity=8, alpha=1.0,
+                                   beta_start=0.4, beta_end=1.0)
+    for i in range(4):
+        buf.push((f't-{i}',))
+    _, idxs, _ = buf.sample(4, frac=0.0)
+    chosen = idxs[0]
+    buf.update_priorities([chosen], [100.0])
+    transitions, _, _ = buf.sample(50, frac=0.0)
+    # Most samples should now correspond to the high-priority leaf's payload.
+    target_payload_index = chosen - (buf.tree.capacity - 1)
+    target_payload = buf.tree.data[target_payload_index]
+    matches = sum(1 for t in transitions if t == target_payload)
+    assert matches >= 25
