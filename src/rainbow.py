@@ -389,4 +389,59 @@ class NStepBuffer:
         while self.window:
             yield self._make_n_step(self.window)
             self.window.popleft()
-        self._terminal_tail = None
+
+
+# ============================================================
+# Block 6a — Categorical projection (Bellemare 2017 Algorithm 1)
+# ============================================================
+
+
+def project_distribution(next_dist: torch.Tensor,
+                          rewards: torch.Tensor,
+                          dones: torch.Tensor,
+                          gamma_n: float,
+                          support: torch.Tensor,
+                          v_min: float,
+                          v_max: float,
+                          n_atoms: int) -> torch.Tensor:
+    """Project the next-state distribution to the original support after
+    applying the n-step Bellman operator. Vectorised over batch.
+
+    Inputs (all batched):
+        next_dist: (B, n_atoms) — categorical distribution at chosen next action
+        rewards:   (B,)         — n-step return R^(n)
+        dones:     (B,)         — 1.0 if (s_{t+n}, done) else 0.0
+        gamma_n:   scalar       — gamma ** n
+        support:   (n_atoms,)   — atom values z_j
+        v_min, v_max: support endpoints
+        n_atoms:   number of atoms
+
+    Returns:
+        m: (B, n_atoms) — projected target distribution m_j(s, a)
+    """
+    B = next_dist.size(0)
+    delta_z = (v_max - v_min) / (n_atoms - 1)
+
+    # Tz_j = clip(R + gamma^n * z_j * (1 - done), v_min, v_max)
+    rewards = rewards.unsqueeze(1)            # (B, 1)
+    dones = dones.unsqueeze(1)                # (B, 1)
+    Tz = rewards + (1.0 - dones) * gamma_n * support.unsqueeze(0)  # (B, n_atoms)
+    Tz = Tz.clamp(min=v_min, max=v_max)
+
+    b = (Tz - v_min) / delta_z                # continuous index in [0, n_atoms-1]
+    l = b.floor().long().clamp(0, n_atoms - 1)
+    u = b.ceil().long().clamp(0, n_atoms - 1)
+
+    # Distribute mass with linear interpolation between l and u:
+    # m_l += p * (u - b);   m_u += p * (b - l)
+    m = torch.zeros(B, n_atoms, dtype=next_dist.dtype, device=next_dist.device)
+    # When l == u (Tz lands exactly on a support point), put full mass at l.
+    eq_mask = (l == u)
+    # Lower part
+    m.scatter_add_(1, l, next_dist * (u.float() - b))
+    # Upper part
+    m.scatter_add_(1, u, next_dist * (b - l.float()))
+    # Patch up the equal case: above contributes 0 from both terms; restore.
+    if eq_mask.any():
+        m.scatter_add_(1, l, next_dist * eq_mask.float())
+    return m

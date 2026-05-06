@@ -337,3 +337,52 @@ def test_n_step_buffer_continues_after_full_window():
     assert outs[2][1] == 0
     assert outs[3][1] == 1
     assert outs[4][1] == 2
+
+
+# ============================================================
+# project_distribution tests
+# ============================================================
+
+def test_project_distribution_preserves_total_mass():
+    """Projection of a valid distribution must yield a valid distribution
+    (rows sum to ~1, all non-negative)."""
+    from src.rainbow import project_distribution
+
+    n_atoms = 51
+    v_min, v_max = -10.0, 10.0
+    support = torch.linspace(v_min, v_max, n_atoms)
+    B = 16
+    next_dist = torch.softmax(torch.randn(B, n_atoms), dim=-1)
+    rewards = torch.tensor([-1.0] * B)
+    dones = torch.tensor([0.0] * B)
+    m = project_distribution(next_dist, rewards, dones,
+                              gamma_n=0.9 ** 3,
+                              support=support, v_min=v_min, v_max=v_max,
+                              n_atoms=n_atoms)
+    assert m.shape == (B, n_atoms)
+    sums = m.sum(dim=-1)
+    assert torch.allclose(sums, torch.ones_like(sums), atol=1e-4)
+    assert (m >= 0).all()
+
+
+def test_project_distribution_done_is_point_mass_at_clipped_reward():
+    """For done=True, the projection of any next_dist must collapse to a
+    distribution concentrated near clip(R, v_min, v_max)."""
+    from src.rainbow import project_distribution
+
+    n_atoms = 51
+    v_min, v_max = -10.0, 10.0
+    support = torch.linspace(v_min, v_max, n_atoms)
+    B = 1
+    next_dist = torch.softmax(torch.randn(B, n_atoms), dim=-1)
+    rewards = torch.tensor([10.0])     # in-range reward
+    dones = torch.tensor([1.0])
+    m = project_distribution(next_dist, rewards, dones,
+                              gamma_n=0.9 ** 3,
+                              support=support, v_min=v_min, v_max=v_max,
+                              n_atoms=n_atoms)
+    expected_value = (m * support).sum(dim=-1).item()
+    # Point mass at +10 -> expected value should be ~+10.
+    assert abs(expected_value - 10.0) < 1e-3
+    # Distribution sum still ~1.
+    assert abs(m.sum().item() - 1.0) < 1e-4
