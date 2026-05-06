@@ -79,3 +79,98 @@ def test_rollout_dataset_uses_online_model_for_action_selection():
     # Each move calls online once for action selection. One game ≤ 9 moves
     # (`mov > max_moves` lets one extra step through, matching HW3-1/2 semantics).
     assert 1 <= calls['n'] <= 9
+
+
+# -------- DQNLightningModule --------
+
+
+def test_lightning_module_initial_target_equals_online():
+    """At construction the target network must mirror the online network."""
+    from src.dqn_lightning import DQNLightningModule
+
+    m = DQNLightningModule(lr=1e-3, gamma=0.9, sync_freq=500,
+                           epochs=10, sched=False, huber=False)
+    for p_o, p_t in zip(m.online.parameters(), m.target.parameters()):
+        assert torch.equal(p_o.data, p_t.data)
+
+
+def test_lightning_module_loss_class_switches_with_huber():
+    """huber=True should select SmoothL1Loss; huber=False -> MSELoss."""
+    from src.dqn_lightning import DQNLightningModule
+
+    m_mse = DQNLightningModule(lr=1e-3, gamma=0.9, sync_freq=500,
+                               epochs=10, sched=False, huber=False)
+    m_huber = DQNLightningModule(lr=1e-3, gamma=0.9, sync_freq=500,
+                                 epochs=10, sched=False, huber=True)
+    assert isinstance(m_mse.loss_fn, torch.nn.MSELoss)
+    assert isinstance(m_huber.loss_fn, torch.nn.SmoothL1Loss)
+
+
+def test_lightning_module_training_step_returns_scalar_loss():
+    """Feed a known minibatch, verify loss is a 0-d differentiable tensor."""
+    from src.dqn_lightning import DQNLightningModule
+
+    m = DQNLightningModule(lr=1e-3, gamma=0.9, sync_freq=500,
+                           epochs=10, sched=False, huber=False)
+    B = 4
+    s1 = torch.randn(B, 64)
+    a = torch.tensor([0, 1, 2, 3])
+    r = torch.tensor([-1.0, -1.0, 10.0, -1.0])
+    s2 = torch.randn(B, 64)
+    d = torch.tensor([0.0, 0.0, 1.0, 0.0])
+    loss = m.training_step((s1, a, r, s2, d), batch_idx=0)
+    assert loss.ndim == 0
+    assert loss.requires_grad
+
+
+def test_lightning_module_target_sync_fires_on_correct_step():
+    """on_train_batch_end should copy online → target every sync_freq calls."""
+    from src.dqn_lightning import DQNLightningModule
+
+    m = DQNLightningModule(lr=1e-3, gamma=0.9, sync_freq=3,
+                           epochs=10, sched=False, huber=False)
+    # Mutate online to differ from target.
+    with torch.no_grad():
+        for p in m.online.parameters():
+            p.add_(1.0)
+    # First two calls: no sync yet.
+    m.on_train_batch_end(None, None, None, 0)
+    m.on_train_batch_end(None, None, None, 0)
+    not_synced = any(
+        not torch.equal(po.data, pt.data)
+        for po, pt in zip(m.online.parameters(), m.target.parameters())
+    )
+    assert not_synced
+    # Third call: sync fires.
+    m.on_train_batch_end(None, None, None, 0)
+    for p_o, p_t in zip(m.online.parameters(), m.target.parameters()):
+        assert torch.equal(p_o.data, p_t.data)
+
+
+def test_lightning_module_configure_optimizers_no_sched():
+    """sched=False -> bare optimizer."""
+    from src.dqn_lightning import DQNLightningModule
+
+    m = DQNLightningModule(lr=1e-3, gamma=0.9, sync_freq=500,
+                           epochs=10, sched=False, huber=False)
+    opt = m.configure_optimizers()
+    assert isinstance(opt, torch.optim.Adam)
+
+
+def test_lightning_module_configure_optimizers_with_sched():
+    """sched=True -> dict with optimizer + CosineAnnealingLR."""
+    from src.dqn_lightning import DQNLightningModule
+
+    m = DQNLightningModule(lr=1e-3, gamma=0.9, sync_freq=500,
+                           epochs=100, sched=True, huber=False)
+    out = m.configure_optimizers()
+    assert isinstance(out, dict)
+    assert isinstance(out['optimizer'], torch.optim.Adam)
+    sched_cfg = out['lr_scheduler']
+    assert isinstance(sched_cfg['scheduler'],
+                      torch.optim.lr_scheduler.CosineAnnealingLR)
+    assert sched_cfg['interval'] == 'epoch'
+    # T_max should equal epochs.
+    assert sched_cfg['scheduler'].T_max == 100
+    # eta_min should be 1e-5 per spec.
+    assert abs(sched_cfg['scheduler'].eta_min - 1e-5) < 1e-12
