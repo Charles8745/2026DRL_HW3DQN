@@ -386,3 +386,55 @@ def test_project_distribution_done_is_point_mass_at_clipped_reward():
     assert abs(expected_value - 10.0) < 1e-3
     # Distribution sum still ~1.
     assert abs(m.sum().item() - 1.0) < 1e-4
+
+
+# ============================================================
+# train_rainbow end-to-end smoke
+# ============================================================
+
+def test_train_rainbow_smoke_writes_all_artifacts(tmp_path):
+    """Tiny-budget end-to-end run; verifies every HW3-1/2/3-style artifact
+    is produced and metrics record component flags + key hyperparams."""
+    from src.rainbow import train_rainbow, STAGE_LABEL, build_rainbow_model
+
+    out_dir = tmp_path / 'rainbow_smoke'
+    metrics = train_rainbow(
+        epochs=4,
+        mem_size=64,
+        batch_size=8,
+        max_moves=6,
+        sync_freq=2,
+        n_step=3,
+        n_atoms=11,        # smaller for speed
+        v_min=-10.0,
+        v_max=10.0,
+        snapshot_every=2,
+        mode='static',
+        seed=0,
+        out_dir=str(out_dir),
+        eval_n_games=2,
+    )
+
+    assert metrics['stage'] == STAGE_LABEL
+    assert metrics['method'] == 'rainbow'
+    assert metrics['mode'] == 'static'
+    assert metrics['components'] == {
+        'double': True, 'dueling': True, 'per': True,
+        'n_step': True, 'distributional': True, 'noisy': True,
+    }
+    assert metrics['hyperparams']['n_step'] == 3
+    assert metrics['hyperparams']['n_atoms'] == 11
+    assert metrics['hyperparams']['v_min'] == -10.0
+    assert metrics['hyperparams']['v_max'] == 10.0
+
+    # Artifact set matches HW3-1/2/3.
+    assert (out_dir / 'checkpoint.pth').exists()
+    assert (out_dir / 'losses.npy').exists()
+    assert (out_dir / 'loss.png').exists()
+    assert (out_dir / 'metrics.json').exists()
+    assert (out_dir / 'snapshots').is_dir()
+
+    # Snapshots round-trip through build_rainbow_model with matching kwargs.
+    sd = torch.load(out_dir / 'checkpoint.pth', weights_only=True)
+    fresh = build_rainbow_model(n_atoms=11, v_min=-10.0, v_max=10.0)
+    fresh.load_state_dict(sd)        # must not raise
