@@ -174,3 +174,40 @@ def test_lightning_module_configure_optimizers_with_sched():
     assert sched_cfg['scheduler'].T_max == 100
     # eta_min should be 1e-5 per spec.
     assert abs(sched_cfg['scheduler'].eta_min - 1e-5) < 1e-12
+
+
+# -------- SnapshotCallback --------
+
+
+def test_snapshot_callback_writes_every_n_games(tmp_path):
+    """on_train_epoch_end called 6 times with every=2 -> writes at game 2, 4, 6."""
+    from src.dqn_lightning import DQNLightningModule, SnapshotCallback
+
+    snaps_dir = tmp_path / 'snapshots'
+    snaps_dir.mkdir()
+    cb = SnapshotCallback(snaps_dir, every=2)
+    module = DQNLightningModule(lr=1e-3, gamma=0.9, sync_freq=500,
+                                epochs=10, sched=False, huber=False)
+    for _ in range(6):
+        cb.on_train_epoch_end(trainer=None, pl_module=module)
+    assert (snaps_dir / 'epoch_0002.pth').exists()
+    assert (snaps_dir / 'epoch_0004.pth').exists()
+    assert (snaps_dir / 'epoch_0006.pth').exists()
+    assert not (snaps_dir / 'epoch_0001.pth').exists()
+    assert not (snaps_dir / 'epoch_0003.pth').exists()
+    assert not (snaps_dir / 'epoch_0005.pth').exists()
+
+
+def test_snapshot_callback_state_dict_loads_into_dueling_model(tmp_path):
+    """Saved snapshot must round-trip through build_dueling_model."""
+    from src.dqn_lightning import DQNLightningModule, SnapshotCallback
+
+    snaps_dir = tmp_path / 'snapshots'
+    snaps_dir.mkdir()
+    cb = SnapshotCallback(snaps_dir, every=1)
+    module = DQNLightningModule(lr=1e-3, gamma=0.9, sync_freq=500,
+                                epochs=10, sched=False, huber=False)
+    cb.on_train_epoch_end(trainer=None, pl_module=module)
+    sd = torch.load(snaps_dir / 'epoch_0001.pth', weights_only=True)
+    fresh = build_dueling_model()
+    fresh.load_state_dict(sd)        # must not raise

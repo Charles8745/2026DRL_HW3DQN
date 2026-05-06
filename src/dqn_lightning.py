@@ -133,3 +133,27 @@ class DQNLightningModule(LightningModule):
             'optimizer': opt,
             'lr_scheduler': {'scheduler': sched, 'interval': 'epoch'},
         }
+
+
+class SnapshotCallback(Callback):
+    """Save online model state_dict every N games as ``epoch_NNNN.pth``.
+
+    Tracks game count internally rather than relying on
+    ``trainer.current_epoch`` to avoid Lightning version off-by-one nuances.
+    Naming matches HW3-1/2 (``epoch_<NNNN>.pth``) so ``animate.py`` works
+    unchanged.
+    """
+
+    def __init__(self, snapshots_dir: Path, every: int):
+        super().__init__()
+        self.snapshots_dir = snapshots_dir
+        self.every = every
+        self._game = 0
+
+    def on_train_epoch_end(self, trainer, pl_module):
+        self._game += 1
+        if self._game % self.every == 0:
+            torch.save(
+                pl_module.online.state_dict(),
+                self.snapshots_dir / f'epoch_{self._game:04d}.pth',
+            )
