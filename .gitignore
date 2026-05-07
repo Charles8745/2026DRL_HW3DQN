@@ -36,7 +36,7 @@ logs/
 HW3_report.md
 HW3_report.pdf
 build_pdf.py
-chatlog1.md
+chatlog*.md
 
 # Training intermediate checkpoints (regenerable, ~44MB total)
 results/**/snapshots/
