@@ -76,10 +76,6 @@ GIF 左半是 agent 在 4×4 棋盤上的 greedy rollout，右半是 loss 曲線
 - [`HW3_2_report.md`](HW3_2_report.md)：HW3-2 中文短報告（Double / Dueling / Combined 原理與比較）
 - [`HW3_3_report.md`](HW3_3_report.md)：HW3-3 中文短報告（Lightning 移植 + 三個 tricks 消融）
 - [`HW3_4_report.md`](HW3_4_report.md)：HW3-4 中文報告（完整 Rainbow + 失敗模式分析）
-- [`chatlog.md`](chatlog.md)：HW3-1 與 Claude 的完整對話紀錄
-- [`chatlog2.md`](chatlog2.md)：HW3-2 與 Claude 的完整對話紀錄
-- [`chatlog3.md`](chatlog3.md)：HW3-3 與 Claude 的完整對話紀錄
-- [`chatlog4.md`](chatlog4.md)：HW3-4 與 Claude 的完整對話紀錄
 
 ## HW3-1 分析結果
 
